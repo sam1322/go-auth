@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"goAuth/internal/storage"
 	"log"
 	"net/http"
 
@@ -25,6 +26,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Get("/auth/{provider}", s.beginAuthProvideCallback)
 	r.Get("/logout/{provider}", s.logOutProvider)
 
+	r.Post("/upload", s.uploadFile)
+
 	return r
 }
 
@@ -43,7 +46,13 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 	// jsonResp, _ := json.Marshal(s.db.Health())
 	// _, _ = w.Write(jsonResp)
-	w.Write([]byte("OK"))
+	jsonText := `{"status": "ok"}`
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(jsonText))
+	// jsonResp, _ := json.Marshal(jsonText)
+	// w.Write(jsonResp)
+	// w.Write([]byte("OK"))
 }
 
 func (s *Server) getAuthCallbackFunction(w http.ResponseWriter, r *http.Request) {
@@ -93,4 +102,62 @@ func JSONMarshal(t interface{}, prefix, indent string) ([]byte, error) {
 	encoder.SetIndent(prefix, indent)
 	err := encoder.Encode(t)
 	return buffer.Bytes(), err
+}
+
+func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("File Upload Endpoint Hit")
+	// Maximum upload of 10 MB files
+	// r.ParseMultipartForm(10 << 20)
+
+	const maxUploadSize = 55<<20 + 512 // 55 MB + 512 bytes
+
+	// Add this line on top
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		// Handle errors consistently and provide informative error messages
+		http.Error(w, "File exceeds maximum upload size or is invalid", http.StatusBadRequest)
+		return
+	}
+	// Get handler for filename, size and headers
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		fmt.Printf("Error uploading file: %v\n", err)
+		jsonText := fmt.Sprintf(`{"message": "Error uploading file: %v"}`, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(jsonText))
+		return
+	}
+
+	fileBuffer := make([]byte, handler.Size)
+	_, err = file.Read(fileBuffer)
+	if err != nil {
+		// Handle error
+	}
+
+	defer file.Close()
+
+	// Process the uploaded file
+	err = processUploadedFile(fileBuffer, handler.Filename, handler.Size, handler.Header.Get("Content-Type"))
+	if err != nil {
+		// Handle error
+	}
+
+	fmt.Printf("MIME Header: %+v\n", handler.Header)
+
+	// Indicate successful upload with a concise JSON response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "file uploaded successfully"}`))
+}
+
+func processUploadedFile(fileBuffer []byte, fileName string, fileSize int64, contentType string) error {
+	fmt.Println("Processing file")
+	fmt.Printf("Uploaded File: %+v\n", fileName)
+	fmt.Printf("File Size: %+v\n", fileSize)
+	fmt.Printf("Content Type: %+v\n", contentType)
+
+	storage.AzureFileUploadByBytes(fileBuffer, fileSize, fileName)
+	return nil
 }

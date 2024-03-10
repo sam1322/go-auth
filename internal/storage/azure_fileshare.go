@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
@@ -48,35 +49,21 @@ func getFileShareClient() (*share.Client, error) {
 
 func AzureFileUpload() {
 	shareClient, err := getFileShareClient()
-	// handleError(err)
+	handleError(err)
 
 	// shareName := "demo-share"
-	srcFileName := "download3.txt"
-	fileSize := int64(5)
 
-	// connectionString, ok := os.LookupEnv("AZURE_STORAGE_CONNECTION_STRING")
-	// if !ok {
-	// 	log.Fatal("the environment variable 'AZURE_STORAGE_CONNECTION_STRING' could not be found")
-	// }
+	now := time.Now()
 
-	// shareClient, err = share.NewClientFromConnectionString(connectionString, shareName, nil)
-	// handleError(err)
+	srcFileName := fmt.Sprintf("file-%v.txt", now.UnixMilli())
 
-	// _, err = shareClient.Create(context.Background(), nil)
-	// fmt.Println("1")
-	// handleError(err)
-
-	// dirName := "temp"
-
-	// dirClient := shareClient.NewDirectoryClient(dirName)
-	// _, err = dirClient.Create(context.TODO(), nil)
-	// fmt.Println("3")
+	fmt.Println("filename", srcFileName)
+	// return
+	// fileSize := int64(5)
 
 	handleError(err)
 
-	// _, content := generateData(int(fileSize))
-	fileData := make([]byte, fileSize)
-	fileData = []byte("hello\ngo\n")
+	fileData := []byte("hello\ngo\n")
 	content := fileData
 	err = os.WriteFile(srcFileName, content, 0644)
 	handleError(err)
@@ -93,16 +80,20 @@ func AzureFileUpload() {
 	fInfo, err := fh.Stat()
 	// TODO: handle error
 	handleError(err)
-	fileSize = fInfo.Size()
+	fileSize := fInfo.Size()
 
 	defer func(fh *os.File) {
 		err := fh.Close()
 		handleError(err)
 	}(fh)
-	srcFileClient := shareClient.NewRootDirectoryClient().NewFileClient(srcFileName)
-	_, err = srcFileClient.Create(context.Background(), fileSize, nil)
 
-	fmt.Println("2")
+	dirName := "temp"
+	// dirClient := shareClient.NewRootDirectoryClient() //create or get the root directory
+	dirClient := shareClient.NewDirectoryClient(dirName)
+	_, err = dirClient.Create(context.TODO(), nil) // to create directory if it does not exists
+
+	srcFileClient := dirClient.NewFileClient(srcFileName)
+	_, err = srcFileClient.Create(context.Background(), fileSize, nil) // to create file if it does not exists
 
 	handleError(err)
 
@@ -111,13 +102,51 @@ func AzureFileUpload() {
 		fmt.Println(err)
 		log.Println("failed to upload file")
 	}
-	fmt.Println("File Upload Successfuly")
+	fmt.Println("File Upload Successfuly", srcFileClient.URL())
 
-	// err = srcFileClient.UploadFile(context.Background(), fh, nil)
+}
 
-	// Create a file
-	// fileContents := []byte("Hello Azure!")
-	// _, err := fileClient.Upload(context.Background(), bytes.NewReader(fileContents), true)
+func AzureFileUploadByBytes(fileBuffer []byte, fileSize int64, fileName string) {
+	shareClient, err := getFileShareClient()
+	handleError(err)
+
+	// shareName := "demo-share"
+
+	// Generate a timestamp string
+	now := time.Now()
+	timestamp := now.Format("2006-01-02T15-04-05") // Adjust format as needed
+
+	srcFileName := fmt.Sprintf("file-%v.txt", now.UnixMilli())
+
+	srcFileName = fileName
+	srcFileName = fmt.Sprintf("%s-%s", timestamp, fileName)
+
+	fmt.Println("filename", srcFileName, "fileSize", fileSize, "FileSize in MB", fileSize/1024/1024, "MB")
+	handleError(err)
+
+	dirName := "temp"
+
+	// dirClient := shareClient.NewRootDirectoryClient()
+	dirClient := shareClient.NewDirectoryClient(dirName)
+	_, err = dirClient.Create(context.TODO(), nil) // to create directory if it does not exists
+
+	srcFileClient := dirClient.NewFileClient(srcFileName)
+	_, err = srcFileClient.Create(context.Background(), fileSize, nil) // to create file if it does not exists
+
+	handleError(err)
+
+	err = srcFileClient.UploadBuffer(context.Background(), fileBuffer, nil)
+	handleError(err)
+	if err != nil {
+		fmt.Println(err)
+		log.Println("failed to upload file")
+	}
+	fmt.Println("File Upload Successfuly", srcFileClient.URL())
+
+	// _, err = srcFileClient.Delete(context.Background(), nil) // to delete the file if we want to
+	// handleError(err)
+
+	// _, err = shareClient.Delete(context.Background(), nil) // to delete the directory if we want to but it might give an error about snapshot
 	// handleError(err)
 }
 
