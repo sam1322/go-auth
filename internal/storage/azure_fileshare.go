@@ -7,13 +7,20 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/file"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azfile/share"
 )
+
+func SanitizeFilename(filename string) string {
+	re := regexp.MustCompile("[^a-zA-Z0-9_.-]+") // Match characters other than letters, numbers, ., -, _
+	return re.ReplaceAllString(filename, "-")    // Replace with "-"
+}
 
 func GetFileShareClient() {
 	// Your connection string can be obtained from the Azure Portal.
@@ -95,7 +102,11 @@ func AzureFileUpload() {
 	srcFileClient := dirClient.NewFileClient(srcFileName)
 	_, err = srcFileClient.Create(context.Background(), fileSize, nil) // to create file if it does not exists
 
-	handleError(err)
+	// handleError(err)
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return
+	}
 
 	err = srcFileClient.UploadFile(context.Background(), fh, nil)
 	if err != nil {
@@ -106,7 +117,7 @@ func AzureFileUpload() {
 
 }
 
-func AzureFileUploadByBytes(fileBuffer []byte, fileSize int64, fileName string) {
+func AzureFileUploadByBytes(fileBuffer []byte, fileSize int64, fileName string) error {
 	shareClient, err := getFileShareClient()
 	handleError(err)
 
@@ -120,6 +131,7 @@ func AzureFileUploadByBytes(fileBuffer []byte, fileSize int64, fileName string) 
 
 	srcFileName = fileName
 	srcFileName = fmt.Sprintf("%s-%s", timestamp, fileName)
+	srcFileName = SanitizeFilename(srcFileName)
 
 	fmt.Println("filename", srcFileName, "fileSize", fileSize, "FileSize in MB", fileSize/1024/1024, "MB")
 	handleError(err)
@@ -132,17 +144,26 @@ func AzureFileUploadByBytes(fileBuffer []byte, fileSize int64, fileName string) 
 
 	srcFileClient := dirClient.NewFileClient(srcFileName)
 	_, err = srcFileClient.Create(context.Background(), fileSize, nil) // to create file if it does not exists
-
-	handleError(err)
+	fmt.Println("File Created", srcFileClient.URL())
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return err
+	}
 
 	err = srcFileClient.UploadBuffer(context.Background(), fileBuffer, nil)
-	handleError(err)
+
+	// handleError(err)
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return err
+	}
+
 	if err != nil {
 		fmt.Println(err)
 		log.Println("failed to upload file")
 	}
 	fmt.Println("File Upload Successfuly", srcFileClient.URL())
-
+	return nil
 	// _, err = srcFileClient.Delete(context.Background(), nil) // to delete the file if we want to
 	// handleError(err)
 
@@ -163,4 +184,32 @@ func generateData(sizeInBytes int) (io.ReadSeekCloser, []byte) {
 		copy(data[:], random64BString)
 	}
 	return streaming.NopCloser(bytes.NewReader(data)), data
+}
+
+func GetSASUrl() (string, error) {
+	shareClient, err := getFileShareClient()
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return "", err
+	}
+	dirName := "temp"
+	srcFileName := "2024-03-10T13-39-39-trafagar-d-law.jpg"
+
+	dirClient := shareClient.NewDirectoryClient(dirName)
+	_, err = dirClient.Create(context.TODO(), nil) // to create directory if it does not exists
+
+	srcFileClient := dirClient.NewFileClient(srcFileName)
+	// _, err = srcFileClient.Create(context.Background(), fileSize, nil) // to create file if it does not exists
+	permission := sas.FilePermissions{Read: true}
+	start := time.Now()
+	expiry := start.AddDate(1, 0, 0)
+	options := file.GetSASURLOptions{StartTime: &start}
+	sasURL, err := srcFileClient.GetSASURL(permission, expiry, &options)
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return "", err
+	}
+	// _ = sasURL
+	fmt.Println("SAS URL", sasURL)
+	return sasURL, nil
 }

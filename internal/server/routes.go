@@ -27,7 +27,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Get("/logout/{provider}", s.logOutProvider)
 
 	r.Post("/upload", s.uploadFile)
-
+	r.Get("/file-link", s.getFileLink)
 	return r
 }
 
@@ -142,6 +142,12 @@ func (s *Server) uploadFile(w http.ResponseWriter, r *http.Request) {
 	err = processUploadedFile(fileBuffer, handler.Filename, handler.Size, handler.Header.Get("Content-Type"))
 	if err != nil {
 		// Handle error
+		fmt.Printf("Error processing file: %v\n", err)
+		jsonText := fmt.Sprintf(`{"message": "Error processing file: %v"}`, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(jsonText))
+		return
 	}
 
 	fmt.Printf("MIME Header: %+v\n", handler.Header)
@@ -158,6 +164,27 @@ func processUploadedFile(fileBuffer []byte, fileName string, fileSize int64, con
 	fmt.Printf("File Size: %+v\n", fileSize)
 	fmt.Printf("Content Type: %+v\n", contentType)
 
-	storage.AzureFileUploadByBytes(fileBuffer, fileSize, fileName)
-	return nil
+	err := storage.AzureFileUploadByBytes(fileBuffer, fileSize, fileName)
+	return err
+}
+
+func (s *Server) getFileLink(w http.ResponseWriter, r *http.Request) {
+	// Get the file link
+	// err := storage.GetSASUrl()
+	fileLink, err := storage.GetSASUrl()
+	if err != nil {
+		fmt.Printf("Error getting file link: %v\n", err)
+		jsonText := fmt.Sprintf(`{"message": "Error getting file link: %v"}`, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(jsonText))
+		return
+	}
+
+	fmt.Printf("File Link: %+v\n", fileLink)
+
+	// Indicate successful upload with a concise JSON response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf(`{"message": "file link: %v"}`, fileLink)))
 }
