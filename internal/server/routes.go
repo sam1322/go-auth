@@ -11,14 +11,29 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
 	"github.com/markbates/goth/gothic"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
 	r := chi.NewRouter()
+
+	r.Use(middleware.RequestID)
+	// r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	// r.Use(middleware.URLFormat)
+	r.Use(render.SetContentType(render.ContentTypeJSON))
+
+	// Set a timeout value on the request context (ctx), that will signal
+	// through ctx.Done() that the request has timed out and further
+	// processing should be stopped.
+	// r.Use(middleware.Timeout(60 * time.Second))
 
 	r.Get("/", s.HelloWorldHandler)
+	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("pong"))
+	})
 
 	r.Get("/health", s.healthHandler)
 
@@ -27,7 +42,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 	r.Get("/logout/{provider}", s.logOutProvider)
 
 	r.Post("/upload", s.uploadFile)
+	r.Post("/upload/blob", s.uploadBlobFile)
 	r.Get("/file-link", s.getFileLink)
+
+	r.Get("/boxes", s.getBoxList)
 	return r
 }
 
@@ -44,15 +62,27 @@ func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
-	// jsonResp, _ := json.Marshal(s.db.Health())
-	// _, _ = w.Write(jsonResp)
-	jsonText := `{"status": "ok"}`
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(jsonText))
+	jsonResp, _ := json.Marshal(s.db.Health())
+	_, _ = w.Write(jsonResp)
+
+	// jsonText := `{"status": "ok"}`
+	// w.Header().Set("Content-Type", "application/json")
+	// w.WriteHeader(http.StatusOK)
+	// w.Write([]byte(jsonText))
+
 	// jsonResp, _ := json.Marshal(jsonText)
 	// w.Write(jsonResp)
 	// w.Write([]byte("OK"))
+}
+
+func (s *Server) getBoxList(w http.ResponseWriter, r *http.Request) {
+	jsonResp, _ := json.Marshal(s.db.QueryBoxes())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(jsonResp)
+	// jsonText := `{"status": "ok"}`
+	// jsonResp, _ := json.Marshal(jsonText)
+	// w.Write(jsonResp)
 }
 
 func (s *Server) getAuthCallbackFunction(w http.ResponseWriter, r *http.Request) {
@@ -187,4 +217,59 @@ func (s *Server) getFileLink(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(fmt.Sprintf(`{"message": "file link: %v"}`, fileLink)))
+}
+
+func (s *Server) uploadBlobFile(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("File Upload Endpoint Hit")
+	// Maximum upload of 10 MB files
+	// r.ParseMultipartForm(10 << 20)
+
+	const maxUploadSize = 55<<20 + 512 // 55 MB + 512 bytes
+
+	// Add this line on top
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		// Handle errors consistently and provide informative error messages
+		http.Error(w, "File exceeds maximum upload size or is invalid", http.StatusBadRequest)
+		return
+	}
+	// Get handler for filename, size and headers
+	file, handler, err := r.FormFile("file")
+	if err != nil {
+		fmt.Printf("Error uploading file: %v\n", err)
+		jsonText := fmt.Sprintf(`{"message": "Error uploading file: %v"}`, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(jsonText))
+		return
+	}
+
+	fileBuffer := make([]byte, handler.Size)
+	_, err = file.Read(fileBuffer)
+	if err != nil {
+		// Handle error
+	}
+
+	defer file.Close()
+
+	// Process the uploaded file
+	// err = processUploadedFile(fileBuffer, handler.Filename, handler.Size, handler.Header.Get("Content-Type"))
+	err = storage.BlobUploadMultipartFile()
+	if err != nil {
+		// Handle error
+		fmt.Printf("Error processing file: %v\n", err)
+		jsonText := fmt.Sprintf(`{"message": "Error processing file: %v"}`, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(jsonText))
+		return
+	}
+
+	fmt.Printf("MIME Header: %+v\n", handler.Header)
+
+	// Indicate successful upload with a concise JSON response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"message": "file uploaded successfully"}`))
 }

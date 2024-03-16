@@ -10,12 +10,8 @@ import (
 func main() {
 
 	auth.NewAuth()
-	// storage.Example_client_NewClient()
-	// storage.Example_client_NewClientWithSharedKeyCredential()
-	// storage.Example_client_NewClientFromConnectionString()
-	// storage.GetFileShareClient()
-	// storage.AzureFileUpload()
 	fmt.Println("Starting Server at 8080...")
+	// todo.AddTodo()
 
 	server := server.InitNewServer()
 

@@ -6,7 +6,10 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
+	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 )
@@ -73,7 +76,7 @@ func Example_client_NewClientWithSharedKeyCredential() {
 	// accountKey, ok := os.LookupEnv("AZURE_STORAGE_ACCOUNT_KEY")
 	accountKey, ok := os.LookupEnv("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY")
 	if !ok {
-		panic("AZURE_STORAGE_ACCOUNT_KEY could not be found")
+		panic("AZURE_STORAGE_PRIMARY_ACCOUNT_KEY could not be found")
 	}
 	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", accountName)
 
@@ -85,7 +88,7 @@ func Example_client_NewClientWithSharedKeyCredential() {
 	fmt.Println(serviceClient.URL())
 }
 
-func Example_client_NewClientFromConnectionString() {
+func blobClientFromConnectionString() {
 	// this example uses a connection string to authenticate with Azure Blob Storage
 	connectionString, ok := os.LookupEnv("AZURE_STORAGE_CONNECTION_STRING")
 	if !ok {
@@ -186,6 +189,38 @@ func Example_client_UploadFile() {
 			},
 		})
 	handleError(err)
+}
+
+func BlobUploadMultipartFile() error {
+	client, err := getBlobServiceClient()
+	// handleError(err)
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return err
+	}
+	containerName := "sam-blob"
+	blobData := "Hello world!"
+	blobName := "HelloWorld.txt"
+
+	now := time.Now()
+	timestamp := now.Format("2006-01-02T15-04-05") // Adjust format as needed
+
+	blobName = fmt.Sprintf("file-%v.txt", now.UnixMilli())
+	blobName = fmt.Sprintf("%s-%s.txt", "file", timestamp)
+	uploadResp, err := client.UploadStream(context.TODO(),
+		containerName,
+		blobName,
+		strings.NewReader(blobData),
+		&azblob.UploadStreamOptions{
+			Metadata: map[string]*string{"Foo": to.Ptr("Bar")},
+			Tags:     map[string]string{"Year": "2024"},
+		})
+	if FancyHandleError(err) {
+		log.Print("stuff")
+		return err
+	}
+	fmt.Println(uploadResp)
+	return nil
 }
 
 // // This example is a quick-starter and demonstrates how to get started using the Azure Blob Storage SDK for Go.

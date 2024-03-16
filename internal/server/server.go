@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -18,12 +19,11 @@ type Server struct {
 	db database.Service
 }
 
-func NewServer() *http.Server {
+func InitNewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	NewServer := &Server{
 		port: port,
-
-		// db: database.New(),
+		db:   database.New(),
 	}
 
 	// Declare Server config
@@ -36,4 +36,10 @@ func NewServer() *http.Server {
 	}
 
 	return server
+}
+
+// GetDB returns gorm (ORM)
+
+func (s *Server) GetDB() *sql.DB {
+	return s.db.GetDB()
 }
