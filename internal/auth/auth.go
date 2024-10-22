@@ -34,8 +34,12 @@ func NewAuth() {
 
 	gothic.Store = store
 
+	googleProvider := google.New(googleClientId, googleClientSecretKey, "http://localhost:8080/auth/google/callback")
+	googleProvider.SetPrompt("consent", "select_account")
+
 	goth.UseProviders(
-		google.New(googleClientId, googleClientSecretKey, "http://localhost:8080/auth/google/callback"),
+		googleProvider,
+		//google.New(googleClientId, googleClientSecretKey, "http://localhost:8080/auth/google/callback"),
 		github.New(os.Getenv("GITHUB_KEY"), os.Getenv("GITHUB_SECRET"), "http://localhost:8080/auth/github/callback"),
 	)
 

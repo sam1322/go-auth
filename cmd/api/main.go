@@ -14,6 +14,7 @@ func main() {
 	// storage.Example_client_NewClientFromConnectionString()
 	// storage.GetFileShareClient()
 	// storage.AzureFileUpload()
+	fmt.Println("Starting server...")
 
 	server := server.NewServer()
 
